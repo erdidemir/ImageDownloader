@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Net;
-using System.Threading;
-using System.Threading.Tasks;
+﻿using System.Net;
 
 namespace ImageDownloader
 {
@@ -19,22 +14,16 @@ namespace ImageDownloader
         public delegate void ProgressEventHandler(int current, int total);
         public static event ProgressEventHandler ProgressEvent;
 
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
-            AppDomain.CurrentDomain.ProcessExit += new EventHandler(OnProcessExit);
-            Console.CancelKeyPress += new ConsoleCancelEventHandler(OnCancelKeyPress);
+            AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
+            Console.CancelKeyPress += OnCancelKeyPress;
             ProgressEvent += PrintProgress;
 
-            // Read input from JSON file (optional)
-            ReadInputFromJson();
+            ReadInput();
 
-            // Read input from console (if JSON file is not used or some fields are missing)
-            ReadInputFromConsole();
-
-            // Create save directory if it doesn't exist
             Directory.CreateDirectory(savePath);
 
-            // Start downloading images
             Console.WriteLine($"Downloading {totalCount} images ({parallelism} parallel downloads at most)\n");
 
             List<Task> downloadTasks = new List<Task>();
@@ -47,7 +36,7 @@ namespace ImageDownloader
 
                 if (downloadTasks.Count >= parallelism || i == totalCount)
                 {
-                    Task.WaitAny(downloadTasks.ToArray());
+                    await Task.WhenAny(downloadTasks);
                     downloadTasks.RemoveAll(t => t.IsCompleted);
                 }
             }
@@ -80,30 +69,13 @@ namespace ImageDownloader
             }
         }
 
-        static void ReadInputFromJson()
-        {
-            try
-            {
-                string inputJson = File.ReadAllText("Input.json");
-                InputData inputData = Newtonsoft.Json.JsonConvert.DeserializeObject<InputData>(inputJson);
-
-                totalCount = inputData.Count;
-                parallelism = inputData.Parallelism;
-                savePath = inputData.SavePath;
-            }
-            catch (Exception)
-            {
-                // JSON file cannot be read or deserialized, continue with console input
-            }
-        }
-
-        static void ReadInputFromConsole()
+        static void ReadInput()
         {
             Console.Write("Enter the number of images to download: ");
-            totalCount = GetIntegerInput();
+            totalCount = GetPositiveIntegerInput();
 
             Console.Write("Enter the maximum parallel download limit: ");
-            parallelism = GetIntegerInput();
+            parallelism = GetPositiveIntegerInput();
 
             Console.Write("Enter the save path (default: ./outputs): ");
             savePath = Console.ReadLine();
@@ -111,7 +83,7 @@ namespace ImageDownloader
                 savePath = "./outputs";
         }
 
-        static int GetIntegerInput()
+        static int GetPositiveIntegerInput()
         {
             int number;
             while (!int.TryParse(Console.ReadLine(), out number) || number <= 0)
@@ -140,7 +112,6 @@ namespace ImageDownloader
 
         static void CleanUp()
         {
-            // Delete downloaded images
             for (int i = 1; i <= downloadedCount; i++)
             {
                 string fileName = $"{i}.png";
@@ -148,7 +119,6 @@ namespace ImageDownloader
                 File.Delete(filePath);
             }
 
-            // Delete save directory if empty
             if (Directory.GetFiles(savePath).Length == 0)
                 Directory.Delete(savePath);
 
@@ -160,12 +130,5 @@ namespace ImageDownloader
             Console.SetCursorPosition(0, Console.CursorTop);
             Console.Write($"Progress: {current}/{total}");
         }
-    }
-
-    class InputData
-    {
-        public int Count { get; set; }
-        public int Parallelism { get; set; }
-        public string SavePath { get; set; }
     }
 }
